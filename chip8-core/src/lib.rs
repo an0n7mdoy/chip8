@@ -3,8 +3,7 @@ struct Hardware {
     registers: [u8; 16],
     index:      u16,
     pc:         u16,
-    stack:     [u16; 16],
-    stack_p:    usize,
+    stack:      Vec<u16>,
     d_timer:    u8,
     s_timer:    u8,
     display:  [[bool; 32]; 64],
@@ -37,8 +36,7 @@ impl Hardware {
             registers: [0; 16],
             index:      0,
             pc:         0x200,
-            stack:     [0; 16],
-            stack_p:    0,
+            stack:      Vec::new(),
             d_timer:    0,
             s_timer:    0,
             display:  [[false; 32]; 64],
@@ -54,40 +52,104 @@ impl Hardware {
     }
 
     fn fetch(&mut self) -> u16 {
-        let i1  = self.memory[self.pc as usize] as u16;
-        let i2  = self.memory[(self.pc + 1) as usize] as u16;
-        let res = (i1 << 8) | i2;
+        let i1:  u16  = self.memory[self.pc as usize] as u16;
+        let i2:  u16  = self.memory[(self.pc + 1) as usize] as u16;
+        let res: u16 = (i1 << 8) | i2;
         self.pc += 2;
         res
     }
 
     fn execute(&mut self, opcode: u16) {
-        let d   =  (opcode & 0xF000) >> 12;
-        let x = ((opcode & 0x0F00) >> 8) as usize;
-        let y = ((opcode & 0x00F0) >> 4) as usize;
-        let n    =  (opcode & 0x000F)       as u8;
-        let nn   =  (opcode & 0x00FF)       as u8;
-        let nnn =   opcode & 0x0FFF;
+        let d:   u16   =  (opcode & 0xF000) >> 12;
+        let x:   usize = ((opcode & 0x0F00) >> 8) as usize;
+        let y:   usize = ((opcode & 0x00F0) >> 4) as usize;
+        let n:   u8    =  (opcode & 0x000F)       as u8;
+        let nn:  u8    =  (opcode & 0x00FF)       as u8;
+        let nnn: u16   =   opcode & 0x0FFF;
+
+        
 
         match (d, x, y, n) {
-            (0x0, 0x0, 0xE, 0x0) => { self.display = [[false; 32]; 64]; }
-            (0x1, _,   _,   _  ) => { self.pc = nnn; }
-            (0x6, _,   _,   _  ) => { /* 6XNN: set VX = nn   */ }
-            (0x7, _,   _,   _  ) => { /* 7XNN: Add NN to VX  */ }
-            (0x8, _,   _,   0x0) => { /* 8XY0: set VX to value VY */ }
-            (0x8, _,   _,   0x1) => { /* 8XY1: set VX to bitwise VX or VY */ }
-            (0x8, _,   _,   0x2) => { /* 8XY2: set VX to bitwise VX and VY */ }
-            (0x8, _,   _,   0x3) => { /* 8XY3: set VX to bitwise VX xor VY */ }
-            (0x8, _,   _,   0x4) => { /* 8XY4: VX = VX + VY */ }
-            (0x8, _,   _,   0x5) => { /* 8XY5: VX = VX - VY */ }
-            (0x8, _,   _,   0x7) => { /* 8XY7: VX = VY - VX */ }
+            (0x0, 0x0, 0xE, 0x0) => { // 00E0: Clear screen
+                self.display = [[false; 32]; 64]; 
+            } 
+            (0x1, _,   _,   _  ) => { // 1NNN: Set PC to NNN
+                self.pc = nnn; 
+            } 
+            (0x2, _,   _,   _  ) => { // 2NNN: Call subroutine at NNN
+                self.stack.push(self.pc);
+                self.pc = nnn; 
+            } 
+            (0x0, 0x0, 0xE, 0xE) => { // 00EE: Return to pushed address
+                match self.stack.pop() {
+                    Some(address) => { self.pc = address },
+                    None => {}
+                }
+            } 
+            (0x3, _,   _,   _  ) => { // 3XNN: Skip one instruction if VX == NN
+                if self.registers[x] == nn {self.pc += 2}
+            } 
+            (0x4, _,   _,   _  ) => { // 4XNN: Skip one instruction if VX != NN
+                if self.registers[x] != nn {self.pc += 2}
+            } 
+            (0x5, _,   _,   0x0) => { // 5XY0: Skip one instruction if VX == VY
+                if self.registers[x] == self.registers[y] {self.pc += 2}
+            } 
+            (0x9, _,   _,   0x0) => { // 9XY0: Skip one instruction if VX != VY
+                if self.registers[x] != self.registers[y] {self.pc += 2}
+            } 
+            (0x6, _,   _,   _  ) => { //6XNN: Set VX to NN
+                self.registers[x] = nn; 
+            } 
+            (0x7, _,   _,   _  ) => { //7XNN: Add NN to VX
+                self.registers[x] = self.registers[x].wrapping_add(nn); 
+            } 
+            (0x8, _,   _,   0x0) => { // 8XY0: set VX to value VY
+                self.registers[x] = self.registers[y];
+            } 
+            (0x8, _,   _,   0x1) => { // 8XY1: set VX to bitwise VX or VY
+                self.registers[x] = self.registers[x] | self.registers[y];
+            } 
+            (0x8, _,   _,   0x2) => { // 8XY2: set VX to bitwise VX and VY
+                self.registers[x] = self.registers[x] & self.registers[y];
+            } 
+            (0x8, _,   _,   0x3) => { // 8XY3: set VX to bitwise VX xor VY
+                self.registers[x] = self.registers[x] ^ self.registers[y];
+            } 
+            (0x8, _,   _,   0x4) => { // 8XY4: VX = VX + VY
+                let (result, overflow) = self.registers[x].overflowing_add(self.registers[y]);
+                self.registers[x] = result;
+                self.registers[0xF] = overflow as u8;
+            } 
+            (0x8, _,   _,   0x5) => { // 8XY5: VX = VX - VY
+                let (result, overflow) = self.registers[x].overflowing_sub(self.registers[y]);
+                self.registers[x] = result;
+                self.registers[0xF] = !overflow as u8;
+            } 
+            (0x8, _,   _,   0x7) => { // 8XY7: VX = VY - VX
+                let (result, overflow) = self.registers[y].overflowing_sub(self.registers[x]);
+                self.registers[x] = result;
+                self.registers[0xF] = !overflow as u8;
+            } 
             // for shifts, add option to set VX to value of VY before shift
-            (0x8, _,   _,   0x6) => { /* 8XY6: Shift VX one bit right */ }
-            (0x8, _,   _,   0xE) => { /* 8XYE: Shift VX one bit left */ }
-            (0xA, _,   _,   _  ) => { /* ANNN: Set index register I to value NNN */ }
-            (0xB, _,   _,   _  ) => { /* BNNN: Set pc to (nnn + V0) || BXNN: Set pc to (nnn + VX) */ }
-            (0xC, _,   _,   _  ) => { /* CXNN: Gen rand num R, bitwise R and NN, put result into VX*/ }
-            (0xD, _,   _,   _  ) => { /* DXYN: Display */ }
+            (0x8, _,   _,   0x6) => { // 8XY6: Shift VX one bit right
+
+            } 
+            (0x8, _,   _,   0xE) => { // 8XYE: Shift VX one bit left
+
+            } 
+            (0xA, _,   _,   _  ) => { // ANNN: Set index register I to value NNN
+
+            } 
+            (0xB, _,   _,   _  ) => { // BNNN: Set pc to (nnn + V0) || BXNN: Set pc to (nnn + VX)
+
+            } 
+            (0xC, _,   _,   _  ) => { // CXNN: Gen rand num R, bitwise R and NN, put result into V
+
+            } 
+            (0xD, _,   _,   _  ) => { // DXYN: Display
+
+            } 
 
             _ => { /* unknown opcode */ }
         }  
@@ -103,12 +165,11 @@ mod tests {
         let machine = Hardware::new();
         assert_eq!(machine.memory.len(),     4096  );
         assert_eq!(machine.registers.len(),  16    );
-        assert_eq!(machine.stack.len(),      16    );
+        assert_eq!(machine.stack.len(),      0     );
         assert_eq!(machine.display.len(),    64    );
         assert_eq!(machine.display[0].len(), 32    );
         assert_eq!(machine.keypad.len(),     16    );
         assert_eq!(machine.index,            0     );
-        assert_eq!(machine.stack_p,          0     );
         assert_eq!(machine.d_timer,          0     );
         assert_eq!(machine.s_timer,          0     );
         assert_eq!(machine.pc,               0x200 );
@@ -137,19 +198,286 @@ mod tests {
         assert_eq!(machine.pc, 0x202);
     }
 
+    // 00E0: clear the screen.
     #[test]
-    fn executes() {
+    fn clears_screen() {
         let mut machine = Hardware::new();
-        let that = [0x00u8, 0xE0u8, 0x12u8, 0x34u8];
-        machine.load(&that);
-
-        let i1 = machine.fetch();
-        machine.display = [[true; 32]; 64];
-        machine.execute(i1); 
+        machine.load(&[0x00, 0xE0]);
+        machine.display = [[true; 32]; 64]; // dirty the screen first
+        let op = machine.fetch();
+        machine.execute(op);
         assert_eq!(machine.display, [[false; 32]; 64]);
+    }
 
-        let i2 = machine.fetch();
-        machine.execute(i2); 
+    // 1NNN: jump to NNN.
+    #[test]
+    fn jumps() {
+        let mut machine = Hardware::new();
+        machine.load(&[0x12, 0x34]); // 0x1234: jump to 0x234
+        let op = machine.fetch();
+        machine.execute(op);
         assert_eq!(machine.pc, 0x234);
+    }
+
+    // 2NNN: call a subroutine at NNN (jump + push the return address).
+    #[test]
+    fn calls_subroutine() {
+        let mut machine = Hardware::new();
+        machine.load(&[0x24, 0x00]); // 0x2400: call 0x400
+        let op = machine.fetch();    // reads 0x2400, pc: 0x200 -> 0x202
+        machine.execute(op);
+        assert_eq!(machine.pc, 0x400);          // jumped into the subroutine
+        assert_eq!(machine.stack, vec![0x202]); // pushed the advanced pc as return address
+    }
+
+    // 00EE: return from a subroutine (pop the return address back into pc).
+    #[test]
+    fn returns_from_subroutine() {
+        let mut machine = Hardware::new();
+        machine.load(&[0x24, 0x00]); // 0x2400 at 0x200: call 0x400
+        machine.memory[0x400] = 0x00; // 0x00EE at 0x400: return
+        machine.memory[0x401] = 0xEE;
+
+        let call = machine.fetch();
+        machine.execute(call);       // pc = 0x400, stack = [0x202]
+
+        let ret = machine.fetch();   // reads 0x00EE, pc: 0x400 -> 0x402
+        machine.execute(ret);
+        assert_eq!(machine.pc, 0x202);     // returned to right after the call
+        assert!(machine.stack.is_empty()); // stack popped back to empty
+    }
+
+    // 3XNN: skip the next instruction if VX == NN.
+    #[test]
+    fn skips_if_vx_eq_nn() {
+        // condition true -> skip (pc advances an extra 2)
+        let mut machine = Hardware::new();
+        machine.load(&[0x3A, 0x42]); // 0x3A42: skip if V[A] == 0x42
+        machine.registers[0xA] = 0x42;
+        let op = machine.fetch(); // pc: 0x200 -> 0x202
+        machine.execute(op);
+        assert_eq!(machine.pc, 0x204); // skipped
+
+        // condition false -> no skip
+        let mut machine = Hardware::new();
+        machine.load(&[0x3A, 0x42]);
+        machine.registers[0xA] = 0x00;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.pc, 0x202); // not skipped
+    }
+
+    // 4XNN: skip the next instruction if VX != NN.
+    #[test]
+    fn skips_if_vx_ne_nn() {
+        // condition true (values differ) -> skip
+        let mut machine = Hardware::new();
+        machine.load(&[0x4A, 0x42]); // 0x4A42: skip if V[A] != 0x42
+        machine.registers[0xA] = 0x00;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.pc, 0x204); // skipped
+
+        // condition false (values equal) -> no skip
+        let mut machine = Hardware::new();
+        machine.load(&[0x4A, 0x42]);
+        machine.registers[0xA] = 0x42;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.pc, 0x202); // not skipped
+    }
+
+    // 5XY0: skip the next instruction if VX == VY.
+    #[test]
+    fn skips_if_vx_eq_vy() {
+        // equal -> skip
+        let mut machine = Hardware::new();
+        machine.load(&[0x5A, 0xB0]); // 0x5AB0: skip if V[A] == V[B]
+        machine.registers[0xA] = 0x11;
+        machine.registers[0xB] = 0x11;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.pc, 0x204); // skipped
+
+        // not equal -> no skip
+        let mut machine = Hardware::new();
+        machine.load(&[0x5A, 0xB0]);
+        machine.registers[0xA] = 0x11;
+        machine.registers[0xB] = 0x22;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.pc, 0x202); // not skipped
+    }
+
+    // 9XY0: skip the next instruction if VX != VY.
+    #[test]
+    fn skips_if_vx_ne_vy() {
+        // not equal -> skip
+        let mut machine = Hardware::new();
+        machine.load(&[0x9A, 0xB0]); // 0x9AB0: skip if V[A] != V[B]
+        machine.registers[0xA] = 0x11;
+        machine.registers[0xB] = 0x22;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.pc, 0x204); // skipped
+
+        // equal -> no skip
+        let mut machine = Hardware::new();
+        machine.load(&[0x9A, 0xB0]);
+        machine.registers[0xA] = 0x11;
+        machine.registers[0xB] = 0x11;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.pc, 0x202); // not skipped
+    }
+
+    // 6XNN: set VX to NN.
+    #[test]
+    fn sets_vx_to_nn() {
+        let mut machine = Hardware::new();
+        machine.load(&[0x6A, 0x42]); // 0x6A42: V[A] = 0x42
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 0x42);
+    }
+
+    // 7XNN: add NN to VX, wrapping, without touching VF.
+    #[test]
+    fn adds_nn_to_vx() {
+        // plain add
+        let mut machine = Hardware::new();
+        machine.load(&[0x7A, 0x05]); // 0x7A05: V[A] += 5
+        machine.registers[0xA] = 10;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 15);
+
+        // wraps past 255 and leaves VF untouched
+        let mut machine = Hardware::new();
+        machine.load(&[0x7A, 0x02]); // 0x7A02: V[A] += 2
+        machine.registers[0xA] = 0xFF;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 0x01); // 255 + 2 wraps to 1
+        assert_eq!(machine.registers[0xF], 0); // 7XNN does not set the carry flag
+    }
+
+    // 8XY0: set VX to the value of VY.
+    #[test]
+    fn sets_vx_to_vy() {
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB0]); // 0x8AB0: V[A] = V[B]
+        machine.registers[0xB] = 0x33;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 0x33);
+    }
+
+    // 8XY1: VX = VX | VY.
+    #[test]
+    fn ors_vx_vy() {
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB1]); // 0x8AB1: V[A] |= V[B]
+        machine.registers[0xA] = 0b1100;
+        machine.registers[0xB] = 0b1010;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 0b1110);
+    }
+
+    // 8XY2: VX = VX & VY.
+    #[test]
+    fn ands_vx_vy() {
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB2]); // 0x8AB2: V[A] &= V[B]
+        machine.registers[0xA] = 0b1100;
+        machine.registers[0xB] = 0b1010;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 0b1000);
+    }
+
+    // 8XY3: VX = VX ^ VY.
+    #[test]
+    fn xors_vx_vy() {
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB3]); // 0x8AB3: V[A] ^= V[B]
+        machine.registers[0xA] = 0b1100;
+        machine.registers[0xB] = 0b1010;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 0b0110);
+    }
+
+    // 8XY4: VX = VX + VY, with VF = carry.
+    #[test]
+    fn adds_vx_vy_with_carry() {
+        // no overflow -> VF = 0
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB4]); // 0x8AB4: V[A] += V[B]
+        machine.registers[0xA] = 10;
+        machine.registers[0xB] = 20;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 30);
+        assert_eq!(machine.registers[0xF], 0);
+
+        // overflow -> VF = 1, result wraps
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB4]);
+        machine.registers[0xA] = 200;
+        machine.registers[0xB] = 100;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 44); // 300 wraps to 44
+        assert_eq!(machine.registers[0xF], 1);
+    }
+
+    // 8XY5: VX = VX - VY, with VF = 1 when there is NO borrow.
+    #[test]
+    fn subs_vy_from_vx_with_borrow() {
+        // no borrow (VX >= VY) -> VF = 1
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB5]); // 0x8AB5: V[A] -= V[B]
+        machine.registers[0xA] = 50;
+        machine.registers[0xB] = 20;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 30);
+        assert_eq!(machine.registers[0xF], 1);
+
+        // borrow (VX < VY) -> VF = 0, result wraps
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB5]);
+        machine.registers[0xA] = 20;
+        machine.registers[0xB] = 50;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 226); // 20 - 50 wraps to 226
+        assert_eq!(machine.registers[0xF], 0);
+    }
+
+    // 8XY7: VX = VY - VX, with VF = 1 when there is NO borrow.
+    #[test]
+    fn subs_vx_from_vy_with_borrow() {
+        // no borrow (VY >= VX) -> VF = 1
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB7]); // 0x8AB7: V[A] = V[B] - V[A]
+        machine.registers[0xA] = 20;
+        machine.registers[0xB] = 50;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 30);
+        assert_eq!(machine.registers[0xF], 1);
+
+        // borrow (VY < VX) -> VF = 0, result wraps
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB7]);
+        machine.registers[0xA] = 50;
+        machine.registers[0xB] = 20;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 226); // 20 - 50 wraps to 226
+        assert_eq!(machine.registers[0xF], 0);
     }
 }
