@@ -81,10 +81,7 @@ impl Hardware {
                 self.pc = nnn; 
             } 
             (0x0, 0x0, 0xE, 0xE) => { // 00EE: Return to pushed address
-                match self.stack.pop() {
-                    Some(address) => { self.pc = address },
-                    None => {}
-                }
+                if let Some(address) = self.stack.pop() { self.pc = address }
             } 
             (0x3, _,   _,   _  ) => { // 3XNN: Skip one instruction if VX == NN
                 if self.registers[x] == nn {self.pc += 2}
@@ -108,13 +105,13 @@ impl Hardware {
                 self.registers[x] = self.registers[y];
             } 
             (0x8, _,   _,   0x1) => { // 8XY1: set VX to bitwise VX or VY
-                self.registers[x] = self.registers[x] | self.registers[y];
+                self.registers[x] |= self.registers[y];
             } 
             (0x8, _,   _,   0x2) => { // 8XY2: set VX to bitwise VX and VY
-                self.registers[x] = self.registers[x] & self.registers[y];
+                self.registers[x] &= self.registers[y];
             } 
             (0x8, _,   _,   0x3) => { // 8XY3: set VX to bitwise VX xor VY
-                self.registers[x] = self.registers[x] ^ self.registers[y];
+                self.registers[x] ^= self.registers[y];
             } 
             (0x8, _,   _,   0x4) => { // 8XY4: VX = VX + VY
                 let (result, overflow) = self.registers[x].overflowing_add(self.registers[y]);
@@ -135,13 +132,13 @@ impl Hardware {
             (0x8, _,   _,   0x6) => { // 8XY6: Shift VX one bit right
                 //self.registers[x] = self.registers[y];
                 let shift_out = self.registers[x] & 1;
-                self.registers[x] = self.registers[x] >> 1;
+                self.registers[x] >>= 1;
                 self.registers[0xF] = shift_out;
             } 
             (0x8, _,   _,   0xE) => { // 8XYE: Shift VX one bit left
                 //self.registers[x] = self.registers[y];
                 let shift_out = (self.registers[x] >> 7) & 1;
-                self.registers[x] = self.registers[x] << 1;
+                self.registers[x] <<= 1;
                 self.registers[0xF] = shift_out;
             } 
             (0xA, _,   _,   _  ) => { // ANNN: Set index register I to value NNN
