@@ -17,9 +17,16 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        # -D warnings fails on any lint; dead_code is allowed while the core
+        # has no frontend wiring it up yet (its methods look "unused").
+        run: cargo clippy --all-targets -- -D warnings -A dead_code
 
       - name: Run tests
         run: cargo test --all
