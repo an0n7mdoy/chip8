@@ -1,3 +1,5 @@
+use rand::RngExt;
+use bit_iter::*;
 struct Hardware {
     memory:    [u8; 4096],
     registers: [u8; 16],
@@ -67,8 +69,6 @@ impl Hardware {
         let nn:  u8    =  (opcode & 0x00FF)       as u8;
         let nnn: u16   =   opcode & 0x0FFF;
 
-        
-
         match (d, x, y, n) {
             (0x0, 0x0, 0xE, 0x0) => { // 00E0: Clear screen
                 self.display = [[false; 32]; 64]; 
@@ -133,22 +133,51 @@ impl Hardware {
             } 
             // for shifts, add option to set VX to value of VY before shift
             (0x8, _,   _,   0x6) => { // 8XY6: Shift VX one bit right
-
+                //self.registers[x] = self.registers[y];
+                let shift_out = self.registers[x] & 1;
+                self.registers[x] = self.registers[x] >> 1;
+                self.registers[0xF] = shift_out;
             } 
             (0x8, _,   _,   0xE) => { // 8XYE: Shift VX one bit left
-
+                //self.registers[x] = self.registers[y];
+                let shift_out = (self.registers[x] >> 7) & 1;
+                self.registers[x] = self.registers[x] << 1;
+                self.registers[0xF] = shift_out;
             } 
             (0xA, _,   _,   _  ) => { // ANNN: Set index register I to value NNN
-
+                self.index = nnn;
             } 
-            (0xB, _,   _,   _  ) => { // BNNN: Set pc to (nnn + V0) || BXNN: Set pc to (nnn + VX)
-
+            (0xB, _,   _,   _  ) => { // BNNN: Set pc to (nnn + V0) | BXNN: Set pc to (nnn + VX)
+                // self.pc = nnn + (self.registers[x] as u16);
+                self.pc = nnn + (self.registers[0] as u16);
             } 
-            (0xC, _,   _,   _  ) => { // CXNN: Gen rand num R, bitwise R and NN, put result into V
-
+            (0xC, _,   _,   _  ) => { // CXNN: Gen rand num R, bitwise R and NN, put result into VX
+                let mut rng = rand::rng();
+                let random = rng.random::<u8>();
+                self.registers[x] = random & nn;
             } 
             (0xD, _,   _,   _  ) => { // DXYN: Display
+                let vx = self.registers[x] % 64;  // starting X coordinate
+                let vy = self.registers[y] % 32;  // starting Y coordinate
+                self.registers[0xF] = 0;
 
+                for i in 0..n {
+                    let cy = (vy + i) as usize;
+                    if cy > 31 { break; }
+                    let ca = self.index + i as u16;
+                    let row = self.memory[ca as usize];
+
+                    for j in BitIter::from(row).rev() {
+                        let cx = vx as usize + (7-j);
+                        if cx > 63 { break; }
+                        if self.display[cx][cy] {
+                            self.display[cx][cy] = false;
+                            self.registers[0xF] = 1;
+                        } else {
+                            self.display[cx][cy] = true;
+                        }
+                    }
+                }
             } 
 
             _ => { /* unknown opcode */ }
@@ -479,5 +508,156 @@ mod tests {
         machine.execute(op);
         assert_eq!(machine.registers[0xA], 226); // 20 - 50 wraps to 226
         assert_eq!(machine.registers[0xF], 0);
+    }
+
+    // 8XY6: shift VX right by 1; VF = the bit shifted out (old bit 0).
+    #[test]
+    fn shifts_vx_right() {
+        // low bit set -> VF = 1
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB6]); // 0x8AB6: V[A] >>= 1
+        machine.registers[0xA] = 0b0000_1011; // 0x0B
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 0b0000_0101); // 0x0B >> 1 = 0x05
+        assert_eq!(machine.registers[0xF], 1); // old bit 0 was 1
+
+        // low bit clear -> VF = 0
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xB6]);
+        machine.registers[0xA] = 0b0000_1010; // 0x0A
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 0b0000_0101); // 0x0A >> 1 = 0x05
+        assert_eq!(machine.registers[0xF], 0); // old bit 0 was 0
+    }
+
+    // 8XYE: shift VX left by 1; VF = the bit shifted out (old bit 7).
+    #[test]
+    fn shifts_vx_left() {
+        // high bit set -> VF = 1, top bit is lost
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xBE]); // 0x8ABE: V[A] <<= 1
+        machine.registers[0xA] = 0b1000_0011; // 0x83
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 0b0000_0110); // 0x83 << 1 wraps to 0x06
+        assert_eq!(machine.registers[0xF], 1); // old bit 7 was 1
+
+        // high bit clear -> VF = 0
+        let mut machine = Hardware::new();
+        machine.load(&[0x8A, 0xBE]);
+        machine.registers[0xA] = 0b0000_0011; // 0x03
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 0b0000_0110); // 0x03 << 1 = 0x06
+        assert_eq!(machine.registers[0xF], 0); // old bit 7 was 0
+    }
+
+    // ANNN: Set index register I to value NNN
+    #[test]
+    fn sets_index_to_nnn() {
+        let mut machine = Hardware::new();
+        machine.load(&[0xA1, 0x23]);
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.index, 0x123);
+    }
+
+    // BNNN: jump to NNN + V0.
+    #[test]
+    fn jumps_with_offset() {
+        let mut machine = Hardware::new();
+        machine.load(&[0xB3, 0x00]); // 0xB300: jump to 0x300 + V0
+        machine.registers[0] = 0x12;
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.pc, 0x312); // 0x300 + 0x12
+    }
+
+    // CXNN: VX = random_byte & NN.
+    // Property 1: the result never has a bit set outside the mask NN.
+    #[test]
+    fn random_stays_within_mask() {
+        let nn = 0x0F;
+        for _ in 0..1000 {
+            let mut machine = Hardware::new();
+            machine.load(&[0xCA, nn]); // 0xCA0F: V[A] = random & 0x0F
+            let op = machine.fetch();
+            machine.execute(op);
+            // no bit may be set outside the mask
+            assert_eq!(machine.registers[0xA] & !nn, 0);
+        }
+
+        // Edge case: a zero mask must always produce 0.
+        let mut machine = Hardware::new();
+        machine.load(&[0xCA, 0x00]); // 0xCA00: V[A] = random & 0x00
+        let op = machine.fetch();
+        machine.execute(op);
+        assert_eq!(machine.registers[0xA], 0);
+    }
+
+    // Property 2: with a full mask, the output actually varies
+    // (catches a stuck generator that always returns the same value).
+    #[test]
+    fn random_actually_varies() {
+        use std::collections::HashSet;
+
+        let mut seen = HashSet::new();
+        for _ in 0..1000 {
+            let mut machine = Hardware::new();
+            machine.load(&[0xCA, 0xFF]); // 0xCAFF: V[A] = random & 0xFF
+            let op = machine.fetch();
+            machine.execute(op);
+            seen.insert(machine.registers[0xA]);
+        }
+        // 1000 draws should yield more than one distinct value.
+        assert!(seen.len() > 1);
+    }
+
+    // DXYN: draw an N-row sprite from memory[I] at (VX, VY), XOR-ing pixels.
+    // Uses a 3-row diagonal so a wrong bit-order (mirror) or wrong row address
+    // would land pixels in the wrong place.
+    #[test]
+    fn draws_sprite() {
+        let mut machine = Hardware::new();
+        // sprite: one pixel per row, stepping right each row (a diagonal)
+        machine.memory[0x300] = 0x80; // 0b1000_0000 -> offset 0
+        machine.memory[0x301] = 0x40; // 0b0100_0000 -> offset 1
+        machine.memory[0x302] = 0x20; // 0b0010_0000 -> offset 2
+        machine.index = 0x300;
+        machine.registers[0] = 0; // VX -> start x = 0
+        machine.registers[1] = 0; // VY -> start y = 0
+
+        machine.execute(0xD013); // draw 3 rows at (V0, V1)
+
+        // the diagonal is on
+        assert!(machine.display[0][0]);
+        assert!(machine.display[1][1]);
+        assert!(machine.display[2][2]);
+        // neighbours that must stay off (catches a mirrored draw)
+        assert!(!machine.display[7][0]);
+        assert!(!machine.display[1][0]);
+        assert!(!machine.display[0][1]);
+        // nothing was already on, so no collision
+        assert_eq!(machine.registers[0xF], 0);
+    }
+
+    // DXYN: drawing the same sprite twice erases it (XOR) and flags a collision.
+    #[test]
+    fn draw_collision_sets_vf() {
+        let mut machine = Hardware::new();
+        machine.memory[0x300] = 0x80; // single pixel at offset 0
+        machine.index = 0x300;
+        machine.registers[0] = 0;
+        machine.registers[1] = 0;
+
+        machine.execute(0xD011); // first draw: pixel turns on
+        assert!(machine.display[0][0]);
+        assert_eq!(machine.registers[0xF], 0); // nothing collided
+
+        machine.execute(0xD011); // second draw: same pixel flips back off
+        assert!(!machine.display[0][0]); // erased
+        assert_eq!(machine.registers[0xF], 1); // collision detected
     }
 }
