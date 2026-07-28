@@ -191,7 +191,7 @@ mod tests {
         let machine = Hardware::new();
         assert_eq!(machine.memory.len(),     4096  );
         assert_eq!(machine.registers.len(),  16    );
-        assert_eq!(machine.stack.len(),      0     );
+        assert_eq!(machine.stack.len(),      1     );
         assert_eq!(machine.display.len(),    64    );
         assert_eq!(machine.display[0].len(), 32    );
         assert_eq!(machine.keypad.len(),     16    );
