@@ -1,6 +1,6 @@
 use rand::RngExt;
 use bit_iter::*;
-struct Hardware {
+pub struct Hardware {
     memory:    [u8; 4096],
     registers: [u8; 16],
     index:      u16,
@@ -12,27 +12,34 @@ struct Hardware {
     keypad:    [bool; 16],
 }
 
+// Loaded into memory at 0x050; each glyph is 5 bytes, so digit N lives at 0x050 + N*5.
 const FONT_SET: [u8; 80] = [
-    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-    0x20, 0x60, 0x20, 0x20, 0x70, // 1
-    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0  @ 0x050
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1  @ 0x055
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2  @ 0x05A
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3  @ 0x05F
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4  @ 0x064
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5  @ 0x069
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6  @ 0x06E
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7  @ 0x073
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8  @ 0x078
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9  @ 0x07D
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A  @ 0x082
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B  @ 0x087
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C  @ 0x08C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D  @ 0x091
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E  @ 0x096
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F  @ 0x09B
 ];
 
+impl Default for Hardware {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Hardware {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let mut machine = Self {
             memory:    [0; 4096],
             registers: [0; 16],
@@ -48,7 +55,7 @@ impl Hardware {
         machine
     }
 
-    fn load(&mut self, rom: &[u8]) {
+    pub fn load(&mut self, rom: &[u8]) {
         let end: usize = 0x200 + rom.len();
         self.memory[0x200..end].copy_from_slice(rom);
     }
@@ -176,9 +183,82 @@ impl Hardware {
                     }
                 }
             } 
-
-            _ => { /* unknown opcode */ }
+            (0xE, _,   0x9, 0xE) => { // EX9E: Skip instruction if key VX pressed
+                let vx = self.registers[x] & 0x0F;
+                if self.keypad[vx as usize] { self.pc += 2; }
+            } 
+            (0xE, _,   0xA, 0x1) => { // EXA1: Skip instruction if key VX not pressed
+                let vx = self.registers[x] & 0x0F;
+                if !self.keypad[vx as usize] { self.pc += 2; }
+            }
+            (0xF, _,   0x0, 0x7) => { // FX07: Set VX to current value of delay timer
+                self.registers[x] = self.d_timer;
+            }
+            (0xF, _,   0x1, 0x5) => { // FX15: Set delay timer to value in VX
+                self.d_timer = self.registers[x];
+            }
+            (0xF, _,   0x1, 0x8) => { // FX18: Set sound timer to value in VX
+                self.s_timer = self.registers[x];
+            }
+            (0xF, _,   0x1, 0xE) => { // FX1E: Add VX to index register
+                self.index += self.registers[x] as u16; // unguarded index
+                self.registers[0xF] = (self.index > 0x0FFF) as u8;
+            } 
+            (0xF, _,   0x0, 0xA) => { // FX0A: Get key, decrement pc othewise
+                match self.keypad.iter().position(|&r| r) {
+                     Some(i) => self.registers[x] = i as u8,
+                     None => self.pc -= 2 
+                }
+            } 
+            (0xF, _,   0x2, 0x9) => { // FX29: Set index to the address of char in VX
+                self.index = 0x050 + (self.registers[x] & 0x0F) as u16 * 5;
+            } 
+            (0xF, _,   0x3, 0x3) => { // FX33: Take number from  vx, store digit 1 at I, digit 2 at I+1, digit 3 at i+2
+                let num = self.registers[x];
+                let d1 = num / 100;
+                let d2 = (num % 100) / 10;
+                let d3 = num % 10;
+                let i = self.index as usize;
+                self.memory[i] = d1;
+                self.memory[i+1] = d2;
+                self.memory[i+2] = d3;
+            } 
+            (0xF, _,   0x5, 0x5) => { // FX55: Store V0..VX in succ mem addrss starting with I. If VX == 0, store only V0
+                for i in 0..=x {
+                    self.memory[self.index as usize + i ] = self.registers[i];   
+                }
+                //self.index += x as u16 + 1;
+            } 
+            (0xF, _,   0x6, 0x5) => { // FX65: Store values from I..I+X+1 in V0..VX
+                for i in 0..=x {
+                    self.registers[i] = self.memory[self.index as usize + i ];
+                }
+            } 
+            (0x0, 0x0, 0x0, 0x0) => { // 0000: Buffer
+                self.index = 0x050 + (self.registers[x] & 0x0F) as u16 * 5;
+            }
+            _ => { /* unknown opcode */ 
+                //dbg!{"unknown opcode!!!", d, x, y, n};
+            }
         }  
+    }
+
+    pub fn step(&mut self) {
+        let op = self.fetch(); 
+        self.execute(op);
+    }
+
+    pub fn timer_decrement(&mut self) {
+        self.d_timer = self.d_timer.saturating_sub(1);
+        self.s_timer = self.s_timer.saturating_sub(1);
+    }
+
+    pub fn display(&self) -> &[[bool; 32]; 64] {
+        &self.display
+    }
+    pub fn set_key(&mut self, key: u8, state: bool) {
+        let k = key & 0x0F;
+        self.keypad[k as usize] = state;
     }
 }
 
@@ -656,5 +736,230 @@ mod tests {
         machine.execute(0xD011); // second draw: same pixel flips back off
         assert!(!machine.display[0][0]); // erased
         assert_eq!(machine.registers[0xF], 1); // collision detected
+    }
+
+    // EX9E: skip the next instruction if the key in VX is pressed.
+    #[test]
+    fn skips_if_key_pressed() {
+        // key pressed -> skip
+        let mut machine = Hardware::new();
+        machine.registers[0xA] = 0x5; // VX names key 5
+        machine.keypad[0x5] = true;
+        let op = 0xEA9E; // EX9E with X = A
+        let pc_before = machine.pc;
+        machine.execute(op);
+        assert_eq!(machine.pc, pc_before + 2); // skipped
+
+        // key not pressed -> no skip
+        let mut machine = Hardware::new();
+        machine.registers[0xA] = 0x5;
+        machine.keypad[0x5] = false;
+        let pc_before = machine.pc;
+        machine.execute(0xEA9E);
+        assert_eq!(machine.pc, pc_before); // not skipped
+    }
+
+    // EXA1: skip the next instruction if the key in VX is NOT pressed.
+    #[test]
+    fn skips_if_key_not_pressed() {
+        // key not pressed -> skip
+        let mut machine = Hardware::new();
+        machine.registers[0xA] = 0x5;
+        machine.keypad[0x5] = false;
+        let pc_before = machine.pc;
+        machine.execute(0xEAA1); // EXA1 with X = A
+        assert_eq!(machine.pc, pc_before + 2); // skipped
+
+        // key pressed -> no skip
+        let mut machine = Hardware::new();
+        machine.registers[0xA] = 0x5;
+        machine.keypad[0x5] = true;
+        let pc_before = machine.pc;
+        machine.execute(0xEAA1);
+        assert_eq!(machine.pc, pc_before); // not skipped
+    }
+
+    // A VX value above 0x0F must be masked to the low nibble, not panic.
+    #[test]
+    fn key_index_is_masked() {
+        let mut machine = Hardware::new();
+        machine.registers[0xA] = 0x1F; // low nibble is 0xF
+        machine.keypad[0xF] = true;
+        let pc_before = machine.pc;
+        machine.execute(0xEA9E); // must index key 0xF, not panic on 0x1F
+        assert_eq!(machine.pc, pc_before + 2);
+    }
+
+    // FX07: read the delay timer into VX.
+    #[test]
+    fn reads_delay_timer() {
+        let mut machine = Hardware::new();
+        machine.d_timer = 0x42;
+        machine.execute(0xFA07); // VA = delay timer
+        assert_eq!(machine.registers[0xA], 0x42);
+    }
+
+    // FX15: set the delay timer from VX.
+    #[test]
+    fn sets_delay_timer() {
+        let mut machine = Hardware::new();
+        machine.registers[0xA] = 0x42;
+        machine.execute(0xFA15); // delay timer = VA
+        assert_eq!(machine.d_timer, 0x42);
+    }
+
+    // FX18: set the sound timer from VX.
+    #[test]
+    fn sets_sound_timer() {
+        let mut machine = Hardware::new();
+        machine.registers[0xA] = 0x42;
+        machine.execute(0xFA18); // sound timer = VA
+        assert_eq!(machine.s_timer, 0x42);
+    }
+
+    // FX1E: add VX to the index register.
+    #[test]
+    fn adds_vx_to_index() {
+        // plain add, no overflow past 0x0FFF
+        let mut machine = Hardware::new();
+        machine.index = 0x200;
+        machine.registers[0xA] = 0x05;
+        machine.execute(0xFA1E);
+        assert_eq!(machine.index, 0x205);
+
+        // overflow past 0x0FFF raises VF
+        let mut machine = Hardware::new();
+        machine.index = 0x0FFF;
+        machine.registers[0xA] = 0x01;
+        machine.execute(0xFA1E);
+        assert_eq!(machine.index, 0x1000);
+        assert_eq!(machine.registers[0xF], 1);
+    }
+
+    // FX0A: with no key down, rewind PC so the instruction re-runs (blocking wait).
+    #[test]
+    fn waits_for_key_press() {
+        let mut machine = Hardware::new();
+        machine.pc = 0x300;
+        machine.execute(0xFA0A); // FX0A with X = A, no keys pressed
+        assert_eq!(machine.pc, 0x2FE); // rewound by 2
+        assert_eq!(machine.registers[0xA], 0); // nothing captured
+    }
+
+    // FX0A: with a key down, store its index in VX and leave PC alone.
+    #[test]
+    fn captures_key_press() {
+        let mut machine = Hardware::new();
+        machine.pc = 0x300;
+        machine.keypad[0x7] = true;
+        machine.execute(0xFA0A);
+        assert_eq!(machine.registers[0xA], 0x7); // captured key 7
+        assert_eq!(machine.pc, 0x300); // did not rewind
+    }
+
+    // FX29: point I at the font sprite for the digit in VX (0x050 + digit*5).
+    #[test]
+    fn sets_index_to_font_char() {
+        let mut machine = Hardware::new();
+        machine.registers[0xA] = 0xB; // digit B
+        machine.execute(0xFA29); // FX29 with X = A
+        assert_eq!(machine.index, 0x087); // matches the font table comment for B
+
+        // high nibble is ignored: 0x1B still selects digit B
+        let mut machine = Hardware::new();
+        machine.registers[0xA] = 0x1B;
+        machine.execute(0xFA29);
+        assert_eq!(machine.index, 0x087);
+    }
+
+    // FX33: store the decimal digits of VX at memory[I], I+1, I+2.
+    #[test]
+    fn stores_bcd() {
+        // 254 -> 2, 5, 4
+        let mut machine = Hardware::new();
+        machine.index = 0x300;
+        machine.registers[0xA] = 254;
+        machine.execute(0xFA33); // FX33 with X = A
+        assert_eq!(machine.memory[0x300], 2);
+        assert_eq!(machine.memory[0x301], 5);
+        assert_eq!(machine.memory[0x302], 4);
+
+        // leading zeros are still written: 7 -> 0, 0, 7
+        let mut machine = Hardware::new();
+        machine.index = 0x300;
+        machine.registers[0xA] = 7;
+        machine.execute(0xFA33);
+        assert_eq!(machine.memory[0x300], 0);
+        assert_eq!(machine.memory[0x301], 0);
+        assert_eq!(machine.memory[0x302], 7);
+    }
+
+    // FX55: store V0..=VX into memory starting at I.
+    #[test]
+    fn stores_registers_to_memory() {
+        let mut machine = Hardware::new();
+        machine.index = 0x300;
+        machine.registers[0..=5].copy_from_slice(&[10, 20, 30, 40, 50, 60]);
+        machine.execute(0xF555); // FX55 with X = 5 -> store V0..=V5
+        assert_eq!(machine.memory[0x300..=0x305], [10, 20, 30, 40, 50, 60]);
+        assert_eq!(machine.memory[0x306], 0); // one past the end untouched
+        assert_eq!(machine.index, 0x300); // non-incrementing variant leaves I alone
+    }
+
+    // FX65: load V0..=VX from memory starting at I.
+    #[test]
+    fn loads_registers_from_memory() {
+        let mut machine = Hardware::new();
+        machine.index = 0x300;
+        machine.memory[0x300..=0x305].copy_from_slice(&[11, 22, 33, 44, 55, 66]);
+        machine.execute(0xF565); // FX65 with X = 5 -> load V0..=V5
+        assert_eq!(machine.registers[0..=5], [11, 22, 33, 44, 55, 66]);
+        assert_eq!(machine.registers[6], 0); // register past X untouched
+    }
+
+    // FX55 then FX65 must round-trip all 16 registers unchanged.
+    #[test]
+    fn store_load_round_trips() {
+        let mut machine = Hardware::new();
+        machine.index = 0x300;
+        let values: [u8; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        machine.registers = values;
+
+        machine.execute(0xFF55); // store V0..=VF
+        machine.registers = [0; 16]; // wipe registers
+        machine.execute(0xFF65); // load them back
+
+        assert_eq!(machine.registers, values);
+    }
+
+    // step: fetch + execute in one call — the opcode runs and PC advances.
+    #[test]
+    fn step_fetches_and_executes() {
+        let mut machine = Hardware::new();
+        machine.load(&[0x6A, 0x42]); // 0x6A42: set VA = 0x42
+        machine.step();
+        assert_eq!(machine.registers[0xA], 0x42); // execute ran
+        assert_eq!(machine.pc, 0x202); // fetch advanced PC past the opcode
+    }
+
+    // timer_decrement: both timers count down by 1 and floor at 0.
+    #[test]
+    fn timers_count_down() {
+        let mut machine = Hardware::new();
+        machine.d_timer = 5;
+        machine.s_timer = 2;
+        machine.timer_decrement();
+        assert_eq!(machine.d_timer, 4);
+        assert_eq!(machine.s_timer, 1);
+    }
+
+    #[test]
+    fn timers_do_not_underflow() {
+        let mut machine = Hardware::new();
+        machine.d_timer = 0;
+        machine.s_timer = 0;
+        machine.timer_decrement(); // must stay at 0, not wrap to 255 or panic
+        assert_eq!(machine.d_timer, 0);
+        assert_eq!(machine.s_timer, 0);
     }
 }
