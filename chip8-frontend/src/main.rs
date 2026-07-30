@@ -15,7 +15,10 @@ const KEYMAP: [(KeyCode, u8); 16] = [
 #[macroquad::main("CHIP-8")]
 async fn main() {
     let mut machine = Hardware::new();
-    let rom = std::fs::read("roms/6-keypad.ch8").expect("failed to read ROM");
+    let path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "roms/ibm-logo.ch8".to_string());
+    let rom = std::fs::read(&path).expect("failed to read ROM");
     machine.load(&rom);
     loop {
         for (key, chip8) in KEYMAP {
@@ -39,5 +42,3 @@ async fn main() {
         next_frame().await;   
     }
 }
-
-//i see the ibm logo, but it has horizontal lines every other pixel, i gues thats intende
