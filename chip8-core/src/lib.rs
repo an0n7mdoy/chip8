@@ -260,6 +260,14 @@ impl Hardware {
         let k = key & 0x0F;
         self.keypad[k as usize] = state;
     }
+    
+    pub fn is_beeping(&self) -> bool { 
+        self.s_timer > 0 
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
 }
 
 #[cfg(test)]
@@ -279,6 +287,35 @@ mod tests {
         assert_eq!(machine.d_timer,          0     );
         assert_eq!(machine.s_timer,          0     );
         assert_eq!(machine.pc,               0x200 );
+    }
+
+    #[test]
+    fn reset_restores_fresh_state() {
+        let mut machine = Hardware::new();
+
+        // Dirty every field so a partial reset would be caught.
+        machine.memory[0x300] = 0xAB;
+        machine.registers[3]  = 0x7F;
+        machine.index         = 0x0FFF;
+        machine.pc            = 0x400;
+        machine.stack.push(0x222);
+        machine.d_timer       = 30;
+        machine.s_timer       = 15;
+        machine.display[10][20] = true;
+        machine.keypad[5]     = true;
+
+        machine.reset();
+
+        let fresh = Hardware::new();
+        assert_eq!(machine.memory,    fresh.memory   );
+        assert_eq!(machine.registers, fresh.registers);
+        assert_eq!(machine.index,     fresh.index    );
+        assert_eq!(machine.pc,        fresh.pc       );
+        assert_eq!(machine.stack,     fresh.stack    );
+        assert_eq!(machine.d_timer,   fresh.d_timer  );
+        assert_eq!(machine.s_timer,   fresh.s_timer  );
+        assert_eq!(machine.display,   fresh.display  );
+        assert_eq!(machine.keypad,    fresh.keypad   );
     }
 
     #[test]

@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 chip8-core = { path = "../chip8-core" }
-macroquad = "0.4"
+macroquad = { version = "0.4", features = ["audio"] }

@@ -1,4 +1,4 @@
-use macroquad::prelude::*;
+use macroquad::{audio::*, prelude::*};
 use chip8_core::Hardware;
 
 const STEPS_PER_FRAME: usize = 9;
@@ -20,7 +20,20 @@ async fn main() {
         .unwrap_or_else(|| "roms/ibm-logo.ch8".to_string());
     let rom = std::fs::read(&path).expect("failed to read ROM");
     machine.load(&rom);
+
+    let beep = load_sound_from_bytes(include_bytes!("../../roms/beep.wav"))
+        .await
+        .expect("failed to load beep");
+    let mut beeping = false;
     loop {
+
+        if is_key_pressed(KeyCode::P) {
+            machine.reset();
+            machine.load(&rom);
+        }
+
+
+
         for (key, chip8) in KEYMAP {
             machine.set_key(chip8, is_key_down(key));
         }   
@@ -31,7 +44,9 @@ async fn main() {
         machine.timer_decrement();
 
         clear_background(BLACK);
+
         let disp = machine.display();
+
         for (x, column) in disp.iter().enumerate() {
             for (y, &pixel) in column.iter().enumerate() {
                 if pixel {
@@ -39,6 +54,16 @@ async fn main() {
                 }
             }
         }
+
+        if machine.is_beeping() && !beeping {
+            play_sound(&beep, PlaySoundParams { looped: true, volume: 0.2 });
+            beeping = true;
+        } else if !machine.is_beeping() && beeping {
+            stop_sound(&beep);
+            beeping = false;
+        }
+
+
         next_frame().await;   
     }
 }
