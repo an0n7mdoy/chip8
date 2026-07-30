@@ -15,7 +15,7 @@ const KEYMAP: [(KeyCode, u8); 16] = [
 #[macroquad::main("CHIP-8")]
 async fn main() {
     let mut machine = Hardware::new();
-    let rom = std::fs::read("roms/ibm-logo.ch8").expect("failed to read ROM");
+    let rom = std::fs::read("roms/6-keypad.ch8").expect("failed to read ROM");
     machine.load(&rom);
     loop {
         for (key, chip8) in KEYMAP {
@@ -29,9 +29,9 @@ async fn main() {
 
         clear_background(BLACK);
         let disp = machine.display();
-        for x in 0..64 {
-            for y in 0..32 {
-                if disp[x][y] {
+        for (x, column) in disp.iter().enumerate() {
+            for (y, &pixel) in column.iter().enumerate() {
+                if pixel {
                     draw_rectangle(x as f32 * SCALE, y as f32 * SCALE, SCALE, SCALE, WHITE);
                 }
             }
