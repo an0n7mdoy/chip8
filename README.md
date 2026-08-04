@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/an0n7mdoy/chip8/actions/workflows/ci.yml/badge.svg)](https://github.com/an0n7mdoy/chip8/actions/workflows/ci.yml)  [![Live Demo](https://img.shields.io/badge/play-online-brightgreen)](https://an0n7mdoy.github.io/chip8/)  ![Code size](https://img.shields.io/github/languages/code-size/an0n7mdoy/chip8)  ![Website](https://img.shields.io/website?url=https%3A%2F%2Fan0n7mdoy.github.io%2Fchip8%2F&label=site)  ![License](https://img.shields.io/github/license/an0n7mdoy/chip8)
 
-A CHIP-8 emulator written in Rust. It runs as a **native desktop app** and, from the exact same code, compiles to **WebAssembly** so it plays in the browser — [try it live](https://an0n7mdoy.github.io/chip8/). It ships with a built-in library of 20+ classic games you can flip through without hunting down ROM files.
+A CHIP-8 emulator written in Rust. It runs as a **native desktop app** and, from the exact same code, compiles to **WebAssembly** so it plays in the browser — [try it live](https://an0n7mdoy.github.io/chip8/). Includes a built-in library of 20+ classic games that you can scroll through.
 
 ## What is CHIP-8?
 
@@ -49,7 +49,7 @@ cd chip8
 cargo run --release -p chip8-frontend
 ```
 
-The `--release` flag is worth it — the debug build runs noticeably slower. The window opens on the built-in library's first entry, and you switch games from the keyboard (see below). There's nothing else to configure and no ROM files to download; the games are compiled into the binary.
+The `--release` flag allows the build to run much faster than the debug build would. The window opens on the built-in library's first entry, and you switch games from the keyboard (see below). There's nothing else to configure and no ROM files to download; the games are compiled into the binary.
 
 ## Controls
 
@@ -77,13 +77,11 @@ CHIP-8's controller is a 16-key hex keypad (`0`–`F`). It's mapped onto the lef
 
 So pressing **`Q`** sends CHIP-8 key **`4`**, **`W`** sends **`5`**, and so on.
 
-### ⚠️ Every game has its own controls
+### Every game has its own controls
 
-**CHIP-8 has no standard control scheme.** Each ROM was written independently and hardcodes whatever keys its author chose, using some subset of the 16 hex keys. There is no universal "left/right/fire" — a key that steers a paddle in one game does nothing in another.
+**CHIP-8 has no standard control scheme.** Each ROM was written independently and hardcodes whatever keys its author chose, using some subset of the 16 hex keys. There is no universal "left/right/fire" keys.
 
-That means: **when you start a game, you often have to experiment** to find its controls. Try the keys clustered around the pad (`Q W E`, `1 2 3`) — most games use just two or three of them.
-
-A few of the well-known ones (mapped to the keyboard keys you'd actually press):
+A few of the well-known ones (mapped to the keyboard you press):
 
 | Game | Controls |
 |------|----------|
@@ -93,7 +91,7 @@ A few of the well-known ones (mapped to the keyboard keys you'd actually press):
 | **Blitz** | `W` = drop bomb |
 | **Tank** | `Q` `E` = turn, `W` = fire (and the number row to move) |
 
-These come from the games' original documentation and may not be exhaustive — when in doubt, experiment. On the [web version](https://an0n7mdoy.github.io/chip8/) the on-screen keypad makes trial-and-error easy: just tap keys and watch what happens.
+These come from the games' original documentation and may not be exhaustive — when in doubt, experiment.
 
 ## Game library
 
@@ -155,4 +153,4 @@ Continuous integration runs the tests plus Clippy (with warnings denied) on ever
 
 ## License
 
-See [`LICENSE`](LICENSE).
+See [`LICENSE`](https://github.com/an0n7mdoy/chip8?tab=MIT-1-ov-file).
