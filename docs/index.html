@@ -27,16 +27,17 @@
 
         h1 {
             margin: 0;
-            font-size: 30px;
+            font-size: clamp(16px, 5vw, 28px);
             letter-spacing: 4px;
             font-weight: 600;
+            text-align: center;
         }
 
         .controls {
             color: #a8a8b4;
             display: flex;
             align-items: flex-start;
-            gap: 85px;
+            gap: clamp(16px, 8vw, 48px);
             flex-wrap: wrap;
             justify-content: center;
         }
@@ -52,7 +53,7 @@
             gap: 6px;
         }
         .ctrl-label {
-            font-size: 30px;
+            font-size: clamp(12px, 3.5vw, 18px);
         }
 
         /* Shared clickable-key styling for both the control keys and the pad. */
@@ -73,9 +74,9 @@
         }
 
         .kbd {
-            padding: 23px 18px;
-            min-width: 2.3em;      /* even width across ← → P N, not glyph-hugging */
-            font-size: 40px;
+            padding: clamp(6px, 2vw, 12px) clamp(10px, 3vw, 18px);
+            min-width: 1.6em;      /* even width across ← → P N, not glyph-hugging */
+            font-size: clamp(18px, 6vw, 34px);
             text-align: center;
             line-height: 1;
         }
@@ -117,18 +118,18 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 150px;
+            min-height: clamp(46px, 15vw, 96px);
             background: #1a1a22;
         }
 
         .key .kb {
-            font-size: 30px;
+            font-size: clamp(15px, 5vw, 26px);
             font-weight: 600;
             line-height: 1;
         }
 
         .key .hex {
-            font-size: 20px;
+            font-size: clamp(9px, 3vw, 16px);
             color: #7f7f8c;
             margin-top: 2px;
         }
