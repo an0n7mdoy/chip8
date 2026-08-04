@@ -1,4 +1,6 @@
 use rand::RngExt;
+use rand::rngs::SmallRng;
+use rand::SeedableRng;
 use bit_iter::*;
 pub struct Hardware {
     memory:    [u8; 4096],
@@ -10,6 +12,7 @@ pub struct Hardware {
     s_timer:    u8,
     display:  [[bool; 32]; 64],
     keypad:    [bool; 16],
+    rng: SmallRng
 }
 
 // Loaded into memory at 0x050; each glyph is 5 bytes, so digit N lives at 0x050 + N*5.
@@ -50,6 +53,24 @@ impl Hardware {
             s_timer:    0,
             display:  [[false; 32]; 64],
             keypad:    [false; 16],
+            rng: SmallRng::seed_from_u64(0),
+        };
+        machine.memory[0x050..0x0A0].copy_from_slice(&FONT_SET);
+        machine
+    }
+
+    pub fn new_with_seed(seed: u64) -> Self {
+        let mut machine = Self {
+            memory:    [0; 4096],
+            registers: [0; 16],
+            index:      0,
+            pc:         0x200,
+            stack:      Vec::new(),
+            d_timer:    0,
+            s_timer:    0,
+            display:  [[false; 32]; 64],
+            keypad:    [false; 16],
+            rng: SmallRng::seed_from_u64(seed),
         };
         machine.memory[0x050..0x0A0].copy_from_slice(&FONT_SET);
         machine
@@ -156,9 +177,7 @@ impl Hardware {
                 self.pc = nnn + (self.registers[0] as u16);
             } 
             (0xC, _,   _,   _  ) => { // CXNN: Gen rand num R, bitwise R and NN, put result into VX
-                let mut rng = rand::rng();
-                let random = rng.random::<u8>();
-                self.registers[x] = random & nn;
+                self.registers[x] = self.rng.random::<u8>() & nn;
             } 
             (0xD, _,   _,   _  ) => { // DXYN: Display
                 let vx = self.registers[x] % 64;  // starting X coordinate
@@ -265,8 +284,8 @@ impl Hardware {
         self.s_timer > 0 
     }
 
-    pub fn reset(&mut self) {
-        *self = Self::new();
+    pub fn reset(&mut self, seed: u64) {
+        *self = Self::new_with_seed(seed);
     }
 }
 
@@ -304,7 +323,7 @@ mod tests {
         machine.display[10][20] = true;
         machine.keypad[5]     = true;
 
-        machine.reset();
+        machine.reset(0);
 
         let fresh = Hardware::new();
         assert_eq!(machine.memory,    fresh.memory   );
@@ -717,15 +736,12 @@ mod tests {
     fn random_actually_varies() {
         use std::collections::HashSet;
 
+        let mut machine = Hardware::new();
         let mut seen = HashSet::new();
         for _ in 0..1000 {
-            let mut machine = Hardware::new();
-            machine.load(&[0xCA, 0xFF]); // 0xCAFF: V[A] = random & 0xFF
-            let op = machine.fetch();
-            machine.execute(op);
+            machine.execute(0xCAFF); // V[A] = random & 0xFF
             seen.insert(machine.registers[0xA]);
         }
-        // 1000 draws should yield more than one distinct value.
         assert!(seen.len() > 1);
     }
 

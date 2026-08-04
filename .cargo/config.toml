@@ -1,0 +1,6 @@
+[target.wasm32-unknown-unknown]
+# miniquad's WebGL/audio functions (glBindTexture, init_webgl, audio_init, ...)
+# are provided by the JS bundle at runtime, so they're undefined at link time.
+# Since Rust 1.82 wasm-ld errors on undefined symbols by default; re-allow them
+# so they're emitted as wasm imports for the JS side to resolve.
+rustflags = ["-C", "link-arg=--import-undefined", "-C", "link-arg=--export-table"]
