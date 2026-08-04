@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>CHIP-8</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            min-height: 100%;
+            background: #0e0e12;
+            color: #e8e8ec;
+            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            padding: 24px 12px 40px;
+            box-sizing: border-box;
+        }
+        h1 {
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: 4px;
+            font-weight: 600;
+        }
+        .controls {
+            font-size: 14px;
+            color: #a8a8b4;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        /* Shared clickable-key styling for both the control keys and the pad. */
+        .kbd, .key {
+            font-family: inherit;
+            color: #e8e8ec;
+            background: #24242e;
+            border: 1px solid #3a3a48;
+            border-radius: 6px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;         /* stop touch from scrolling the page */
+            appearance: none;
+            -webkit-appearance: none;
+        }
+        .kbd {
+            padding: 2px 8px;
+            font-size: 13px;
+        }
+        /* 4x4 keypad legend: physical key big, mapped CHIP-8 hex small */
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(4, 48px);
+            gap: 6px;
+        }
+        .key {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 48px;
+            background: #1a1a22;
+        }
+        .key .kb  { font-size: 16px; font-weight: 600; line-height: 1; }
+        .key .hex { font-size: 10px; color: #7f7f8c; margin-top: 2px; }
+        .key .hex::before { content: "→ "; }
+        /* Pressed feedback (added by JS on pointerdown). */
+        .kbd.pressed, .key.pressed {
+            background: #34343f;
+            border-color: #6a6a80;
+        }
+        /* The emulator draws a fixed 640x320 (64x32 grid at SCALE=10). */
+        #glcanvas {
+            width: 640px;
+            height: 320px;
+            border: 3px solid #34343f;
+            border-radius: 6px;
+            background: #000;
+            image-rendering: pixelated;
+            max-width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>CHIP-8</h1>
+
+    <div class="controls">
+        <button class="kbd" data-code="ArrowLeft">&larr;</button>
+        <button class="kbd" data-code="ArrowRight">&rarr;</button> switch game
+        &middot;
+        <button class="kbd" data-code="KeyP">P</button> restart
+        &middot;
+        <button class="kbd" data-code="KeyN">N</button> back to logo
+    </div>
+
+    <div class="keypad">
+        <button class="key" data-code="Digit1"><span class="kb">1</span><span class="hex">1</span></button>
+        <button class="key" data-code="Digit2"><span class="kb">2</span><span class="hex">2</span></button>
+        <button class="key" data-code="Digit3"><span class="kb">3</span><span class="hex">3</span></button>
+        <button class="key" data-code="Digit4"><span class="kb">4</span><span class="hex">C</span></button>
+
+        <button class="key" data-code="KeyQ"><span class="kb">Q</span><span class="hex">4</span></button>
+        <button class="key" data-code="KeyW"><span class="kb">W</span><span class="hex">5</span></button>
+        <button class="key" data-code="KeyE"><span class="kb">E</span><span class="hex">6</span></button>
+        <button class="key" data-code="KeyR"><span class="kb">R</span><span class="hex">D</span></button>
+
+        <button class="key" data-code="KeyA"><span class="kb">A</span><span class="hex">7</span></button>
+        <button class="key" data-code="KeyS"><span class="kb">S</span><span class="hex">8</span></button>
+        <button class="key" data-code="KeyD"><span class="kb">D</span><span class="hex">9</span></button>
+        <button class="key" data-code="KeyF"><span class="kb">F</span><span class="hex">E</span></button>
+
+        <button class="key" data-code="KeyZ"><span class="kb">Z</span><span class="hex">A</span></button>
+        <button class="key" data-code="KeyX"><span class="kb">X</span><span class="hex">0</span></button>
+        <button class="key" data-code="KeyC"><span class="kb">C</span><span class="hex">B</span></button>
+        <button class="key" data-code="KeyV"><span class="kb">V</span><span class="hex">F</span></button>
+    </div>
+
+    <canvas id="glcanvas" tabindex='1' width="640" height="320"></canvas>
+
+    <!-- Bundles gl.js + audio.js + sapp_jsutils + quad-net. Plain gl.js would
+         leave the beep's audio_* imports undefined at runtime. -->
+    <script src="https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js"></script>
+    <script>load("chip8-frontend.wasm");</script>
+    <script>
+        // Bridge on-screen buttons to macroquad: dispatch synthetic keyboard
+        // events at the canvas so the existing is_key_down / is_key_pressed
+        // paths pick them up. No Rust changes needed.
+        //
+        // Wrapped in an IIFE: the mq_js_bundle already declares a global
+        // `const canvas`, so a bare top-level `const canvas` here would be a
+        // duplicate-declaration SyntaxError and abort the whole script.
+        (function () {
+            const glcanvas = document.getElementById("glcanvas");
+
+            function sendKey(type, code) {
+                glcanvas.dispatchEvent(new KeyboardEvent(type, {
+                    code: code,
+                    key: code,
+                    bubbles: true,
+                }));
+            }
+
+            document.querySelectorAll("[data-code]").forEach((btn) => {
+                const code = btn.dataset.code;
+
+                const press = (e) => {
+                    e.preventDefault();
+                    // Keep receiving pointerup even if the finger slides off.
+                    if (e.pointerId !== undefined) btn.setPointerCapture(e.pointerId);
+                    btn.classList.add("pressed");
+                    sendKey("keydown", code);
+                    glcanvas.focus();        // hand focus back so physical keys keep working
+                };
+                const release = () => {
+                    btn.classList.remove("pressed");
+                    sendKey("keyup", code);
+                };
+
+                btn.addEventListener("pointerdown", press);
+                btn.addEventListener("pointerup", release);
+                btn.addEventListener("pointercancel", release);
+                // Don't let a click on the button trigger native button behavior.
+                btn.addEventListener("click", (e) => e.preventDefault());
+            });
+        })();
+    </script>
+</body>
+</html>
