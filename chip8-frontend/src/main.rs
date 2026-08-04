@@ -15,7 +15,7 @@ const KEYMAP: [(KeyCode, u8); 16] = [
 // The switchable game library. include_bytes! paths are relative to this file
 // and case-sensitive; each glyph coerces from &[u8; N] to &'static [u8].
 const ROMS: &[(&str, &[u8])] = &[
-    ("Logo",          include_bytes!("../../roms/ibm-logo.ch8")),
+    ("Logo",          include_bytes!("../../roms/games/C8pic.ch8")),
     ("15 Puzzle",     include_bytes!("../../roms/games/15puzzle.ch8")),
     ("Blitz",         include_bytes!("../../roms/games/Blitz.ch8")),
     ("Breakout",      include_bytes!("../../roms/games/Breakout.ch8")),
