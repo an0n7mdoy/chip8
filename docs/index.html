@@ -1,10 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
-    <title>CHIP-8</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>WEB CHIP-8 EMULATOR</title>
     <style>
-        html, body {
+        html,
+        body {
             margin: 0;
             padding: 0;
             min-height: 100%;
@@ -12,31 +15,49 @@
             color: #e8e8ec;
             font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
         }
+
         body {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 16px;
-            padding: 24px 12px 40px;
+            gap: 14px;
+            padding: 18px 12px 32px;
             box-sizing: border-box;
         }
+
         h1 {
             margin: 0;
-            font-size: 22px;
+            font-size: 30px;
             letter-spacing: 4px;
             font-weight: 600;
         }
+
         .controls {
-            font-size: 14px;
             color: #a8a8b4;
             display: flex;
-            align-items: center;
-            gap: 6px;
+            align-items: flex-start;
+            gap: 85px;
             flex-wrap: wrap;
             justify-content: center;
         }
+        /* Each control = a vertical stack: key(s) on top, caption underneath. */
+        .ctrl {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+        .ctrl-keys {
+            display: flex;
+            gap: 6px;
+        }
+        .ctrl-label {
+            font-size: 30px;
+        }
+
         /* Shared clickable-key styling for both the control keys and the pad. */
-        .kbd, .key {
+        .kbd,
+        .key {
             font-family: inherit;
             color: #e8e8ec;
             background: #24242e;
@@ -45,84 +66,136 @@
             cursor: pointer;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: none;         /* stop touch from scrolling the page */
+            touch-action: none;
+            /* stop touch from scrolling the page */
             appearance: none;
             -webkit-appearance: none;
         }
+
         .kbd {
-            padding: 2px 8px;
-            font-size: 13px;
+            padding: 23px 18px;
+            min-width: 2.3em;      /* even width across ← → P N, not glyph-hugging */
+            font-size: 40px;
+            text-align: center;
+            line-height: 1;
         }
-        /* 4x4 keypad legend: physical key big, mapped CHIP-8 hex small */
+
+        /* Canvas + keypad share one responsive width so the pad lines up
+           exactly under the screen. Caps at 640 on desktop, shrinks on phones. */
+        .stage {
+            width: 640px;
+            max-width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* The emulator now scales to screen_width()/screen_height(), so the
+           canvas can be fluid: full width, locked to the 64:32 (2:1) ratio. */
+        #glcanvas {
+            width: 100%;
+            aspect-ratio: 2 / 1;
+            height: auto;
+            display: block;
+            border: 3px solid #34343f;
+            border-radius: 6px;
+            background: #000;
+            image-rendering: pixelated;
+            box-sizing: border-box;
+        }
+
+        /* 4 columns stretched edge-to-edge under the screen. */
         .keypad {
             display: grid;
-            grid-template-columns: repeat(4, 48px);
+            grid-template-columns: repeat(4, 1fr);
             gap: 6px;
+            width: 100%;
         }
+
         .key {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 48px;
+            min-height: 150px;
             background: #1a1a22;
         }
-        .key .kb  { font-size: 16px; font-weight: 600; line-height: 1; }
-        .key .hex { font-size: 10px; color: #7f7f8c; margin-top: 2px; }
-        .key .hex::before { content: "→ "; }
+
+        .key .kb {
+            font-size: 30px;
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        .key .hex {
+            font-size: 20px;
+            color: #7f7f8c;
+            margin-top: 2px;
+        }
+
+        .key .hex::before {
+            content: "→ ";
+        }
+
         /* Pressed feedback (added by JS on pointerdown). */
-        .kbd.pressed, .key.pressed {
+        .kbd.pressed,
+        .key.pressed {
             background: #34343f;
             border-color: #6a6a80;
-        }
-        /* The emulator draws a fixed 640x320 (64x32 grid at SCALE=10). */
-        #glcanvas {
-            width: 640px;
-            height: 320px;
-            border: 3px solid #34343f;
-            border-radius: 6px;
-            background: #000;
-            image-rendering: pixelated;
-            max-width: 100%;
         }
     </style>
 </head>
 
 <body>
-    <h1>CHIP-8</h1>
+    <h1>WEB CHIP-8 EMULATOR</h1>
 
     <div class="controls">
-        <button class="kbd" data-code="ArrowLeft">&larr;</button>
-        <button class="kbd" data-code="ArrowRight">&rarr;</button> switch game
-        &middot;
-        <button class="kbd" data-code="KeyP">P</button> restart
-        &middot;
-        <button class="kbd" data-code="KeyN">N</button> back to logo
+        <div class="ctrl">
+            <div class="ctrl-keys">
+                <button class="kbd" data-code="ArrowLeft">&larr;</button>
+                <button class="kbd" data-code="ArrowRight">&rarr;</button>
+            </div>
+            <span class="ctrl-label">switch game</span>
+        </div>
+        <div class="ctrl">
+            <div class="ctrl-keys">
+                <button class="kbd" data-code="KeyP">P</button>
+            </div>
+            <span class="ctrl-label">restart</span>
+        </div>
+        <div class="ctrl">
+            <div class="ctrl-keys">
+                <button class="kbd" data-code="KeyN">N</button>
+            </div>
+            <span class="ctrl-label">back to logo</span>
+        </div>
     </div>
 
-    <div class="keypad">
-        <button class="key" data-code="Digit1"><span class="kb">1</span><span class="hex">1</span></button>
-        <button class="key" data-code="Digit2"><span class="kb">2</span><span class="hex">2</span></button>
-        <button class="key" data-code="Digit3"><span class="kb">3</span><span class="hex">3</span></button>
-        <button class="key" data-code="Digit4"><span class="kb">4</span><span class="hex">C</span></button>
+    <div class="stage">
+        <canvas id="glcanvas" tabindex='1' width="640" height="320"></canvas>
 
-        <button class="key" data-code="KeyQ"><span class="kb">Q</span><span class="hex">4</span></button>
-        <button class="key" data-code="KeyW"><span class="kb">W</span><span class="hex">5</span></button>
-        <button class="key" data-code="KeyE"><span class="kb">E</span><span class="hex">6</span></button>
-        <button class="key" data-code="KeyR"><span class="kb">R</span><span class="hex">D</span></button>
+        <div class="keypad">
+            <button class="key" data-code="Digit1"><span class="kb">1</span><span class="hex">1</span></button>
+            <button class="key" data-code="Digit2"><span class="kb">2</span><span class="hex">2</span></button>
+            <button class="key" data-code="Digit3"><span class="kb">3</span><span class="hex">3</span></button>
+            <button class="key" data-code="Digit4"><span class="kb">4</span><span class="hex">C</span></button>
 
-        <button class="key" data-code="KeyA"><span class="kb">A</span><span class="hex">7</span></button>
-        <button class="key" data-code="KeyS"><span class="kb">S</span><span class="hex">8</span></button>
-        <button class="key" data-code="KeyD"><span class="kb">D</span><span class="hex">9</span></button>
-        <button class="key" data-code="KeyF"><span class="kb">F</span><span class="hex">E</span></button>
+            <button class="key" data-code="KeyQ"><span class="kb">Q</span><span class="hex">4</span></button>
+            <button class="key" data-code="KeyW"><span class="kb">W</span><span class="hex">5</span></button>
+            <button class="key" data-code="KeyE"><span class="kb">E</span><span class="hex">6</span></button>
+            <button class="key" data-code="KeyR"><span class="kb">R</span><span class="hex">D</span></button>
 
-        <button class="key" data-code="KeyZ"><span class="kb">Z</span><span class="hex">A</span></button>
-        <button class="key" data-code="KeyX"><span class="kb">X</span><span class="hex">0</span></button>
-        <button class="key" data-code="KeyC"><span class="kb">C</span><span class="hex">B</span></button>
-        <button class="key" data-code="KeyV"><span class="kb">V</span><span class="hex">F</span></button>
+            <button class="key" data-code="KeyA"><span class="kb">A</span><span class="hex">7</span></button>
+            <button class="key" data-code="KeyS"><span class="kb">S</span><span class="hex">8</span></button>
+            <button class="key" data-code="KeyD"><span class="kb">D</span><span class="hex">9</span></button>
+            <button class="key" data-code="KeyF"><span class="kb">F</span><span class="hex">E</span></button>
+
+            <button class="key" data-code="KeyZ"><span class="kb">Z</span><span class="hex">A</span></button>
+            <button class="key" data-code="KeyX"><span class="kb">X</span><span class="hex">0</span></button>
+            <button class="key" data-code="KeyC"><span class="kb">C</span><span class="hex">B</span></button>
+            <button class="key" data-code="KeyV"><span class="kb">V</span><span class="hex">F</span></button>
+        </div>
     </div>
-
-    <canvas id="glcanvas" tabindex='1' width="640" height="320"></canvas>
 
     <!-- Bundles gl.js + audio.js + sapp_jsutils + quad-net. Plain gl.js would
          leave the beep's audio_* imports undefined at runtime. -->
@@ -172,4 +245,5 @@
         })();
     </script>
 </body>
+
 </html>

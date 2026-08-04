@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>CHIP-8</title>
     <style>
         html, body {
@@ -16,13 +17,13 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 16px;
-            padding: 24px 12px 40px;
+            gap: 14px;
+            padding: 18px 12px 32px;
             box-sizing: border-box;
         }
         h1 {
             margin: 0;
-            font-size: 22px;
+            font-size: 20px;
             letter-spacing: 4px;
             font-weight: 600;
         }
@@ -53,37 +54,50 @@
             padding: 2px 8px;
             font-size: 13px;
         }
-        /* 4x4 keypad legend: physical key big, mapped CHIP-8 hex small */
+        /* Canvas + keypad share one responsive width so the pad lines up
+           exactly under the screen. Caps at 640 on desktop, shrinks on phones. */
+        .stage {
+            width: 640px;
+            max-width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        /* The emulator now scales to screen_width()/screen_height(), so the
+           canvas can be fluid: full width, locked to the 64:32 (2:1) ratio. */
+        #glcanvas {
+            width: 100%;
+            aspect-ratio: 2 / 1;
+            height: auto;
+            display: block;
+            border: 3px solid #34343f;
+            border-radius: 6px;
+            background: #000;
+            image-rendering: pixelated;
+            box-sizing: border-box;
+        }
+        /* 4 columns stretched edge-to-edge under the screen. */
         .keypad {
             display: grid;
-            grid-template-columns: repeat(4, 48px);
+            grid-template-columns: repeat(4, 1fr);
             gap: 6px;
+            width: 100%;
         }
         .key {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 48px;
+            min-height: 52px;
             background: #1a1a22;
         }
-        .key .kb  { font-size: 16px; font-weight: 600; line-height: 1; }
+        .key .kb  { font-size: 17px; font-weight: 600; line-height: 1; }
         .key .hex { font-size: 10px; color: #7f7f8c; margin-top: 2px; }
         .key .hex::before { content: "→ "; }
         /* Pressed feedback (added by JS on pointerdown). */
         .kbd.pressed, .key.pressed {
             background: #34343f;
             border-color: #6a6a80;
-        }
-        /* The emulator draws a fixed 640x320 (64x32 grid at SCALE=10). */
-        #glcanvas {
-            width: 640px;
-            height: 320px;
-            border: 3px solid #34343f;
-            border-radius: 6px;
-            background: #000;
-            image-rendering: pixelated;
-            max-width: 100%;
         }
     </style>
 </head>
@@ -100,29 +114,31 @@
         <button class="kbd" data-code="KeyN">N</button> back to logo
     </div>
 
-    <div class="keypad">
-        <button class="key" data-code="Digit1"><span class="kb">1</span><span class="hex">1</span></button>
-        <button class="key" data-code="Digit2"><span class="kb">2</span><span class="hex">2</span></button>
-        <button class="key" data-code="Digit3"><span class="kb">3</span><span class="hex">3</span></button>
-        <button class="key" data-code="Digit4"><span class="kb">4</span><span class="hex">C</span></button>
+    <div class="stage">
+        <canvas id="glcanvas" tabindex='1' width="640" height="320"></canvas>
 
-        <button class="key" data-code="KeyQ"><span class="kb">Q</span><span class="hex">4</span></button>
-        <button class="key" data-code="KeyW"><span class="kb">W</span><span class="hex">5</span></button>
-        <button class="key" data-code="KeyE"><span class="kb">E</span><span class="hex">6</span></button>
-        <button class="key" data-code="KeyR"><span class="kb">R</span><span class="hex">D</span></button>
+        <div class="keypad">
+            <button class="key" data-code="Digit1"><span class="kb">1</span><span class="hex">1</span></button>
+            <button class="key" data-code="Digit2"><span class="kb">2</span><span class="hex">2</span></button>
+            <button class="key" data-code="Digit3"><span class="kb">3</span><span class="hex">3</span></button>
+            <button class="key" data-code="Digit4"><span class="kb">4</span><span class="hex">C</span></button>
 
-        <button class="key" data-code="KeyA"><span class="kb">A</span><span class="hex">7</span></button>
-        <button class="key" data-code="KeyS"><span class="kb">S</span><span class="hex">8</span></button>
-        <button class="key" data-code="KeyD"><span class="kb">D</span><span class="hex">9</span></button>
-        <button class="key" data-code="KeyF"><span class="kb">F</span><span class="hex">E</span></button>
+            <button class="key" data-code="KeyQ"><span class="kb">Q</span><span class="hex">4</span></button>
+            <button class="key" data-code="KeyW"><span class="kb">W</span><span class="hex">5</span></button>
+            <button class="key" data-code="KeyE"><span class="kb">E</span><span class="hex">6</span></button>
+            <button class="key" data-code="KeyR"><span class="kb">R</span><span class="hex">D</span></button>
 
-        <button class="key" data-code="KeyZ"><span class="kb">Z</span><span class="hex">A</span></button>
-        <button class="key" data-code="KeyX"><span class="kb">X</span><span class="hex">0</span></button>
-        <button class="key" data-code="KeyC"><span class="kb">C</span><span class="hex">B</span></button>
-        <button class="key" data-code="KeyV"><span class="kb">V</span><span class="hex">F</span></button>
+            <button class="key" data-code="KeyA"><span class="kb">A</span><span class="hex">7</span></button>
+            <button class="key" data-code="KeyS"><span class="kb">S</span><span class="hex">8</span></button>
+            <button class="key" data-code="KeyD"><span class="kb">D</span><span class="hex">9</span></button>
+            <button class="key" data-code="KeyF"><span class="kb">F</span><span class="hex">E</span></button>
+
+            <button class="key" data-code="KeyZ"><span class="kb">Z</span><span class="hex">A</span></button>
+            <button class="key" data-code="KeyX"><span class="kb">X</span><span class="hex">0</span></button>
+            <button class="key" data-code="KeyC"><span class="kb">C</span><span class="hex">B</span></button>
+            <button class="key" data-code="KeyV"><span class="kb">V</span><span class="hex">F</span></button>
+        </div>
     </div>
-
-    <canvas id="glcanvas" tabindex='1' width="640" height="320"></canvas>
 
     <!-- Bundles gl.js + audio.js + sapp_jsutils + quad-net. Plain gl.js would
          leave the beep's audio_* imports undefined at runtime. -->

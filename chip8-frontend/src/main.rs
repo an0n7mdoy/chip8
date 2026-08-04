@@ -3,7 +3,7 @@ use chip8_core::Hardware;
 
 const STEPS_PER_FRAME: usize = 9;
 
-const SCALE: f32 = 10.0;
+//const SCALE: f32 = 10.0;
 
 const KEYMAP: [(KeyCode, u8); 16] = [
     (KeyCode::Key1, 0x1), (KeyCode::Key2, 0x2), (KeyCode::Key3, 0x3), (KeyCode::Key4, 0xC),
@@ -90,10 +90,15 @@ async fn main() {
 
         let disp = machine.display();
 
+        let scale = (screen_width() / 64.0).min(screen_height() / 32.0);
+        // optional: center it if the canvas isn't exactly 2:1
+        let ox = (screen_width()  - scale * 64.0) / 2.0;
+        let oy = (screen_height() - scale * 32.0) / 2.0;
+
         for (x, column) in disp.iter().enumerate() {
             for (y, &pixel) in column.iter().enumerate() {
                 if pixel {
-                    draw_rectangle(x as f32 * SCALE, y as f32 * SCALE, SCALE, SCALE, WHITE);
+                    draw_rectangle(ox + x as f32 * scale, oy + y as f32 * scale, scale, scale, WHITE);
                 }
             }
         }
