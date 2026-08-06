@@ -6,7 +6,7 @@ A CHIP-8 emulator written in Rust. It runs as a **native desktop app** and, from
 
 ## What is CHIP-8?
 
-CHIP-8 is an interpreted virtual machine from the mid-1970s, designed to make simple games easier to write on early hobbyist computers. It's tiny — 35 instructions, 4 KB of memory, a 64×32 monochrome display, a 16-key hex keypad, and two timers — which makes it the traditional "hello world" of emulator writing. The games (Pong, Space Invaders, Tetris, Breakout, and friends) are public-domain classics that have been passed around for decades.
+CHIP-8 is an interpreted virtual machine from the mid-1970s, designed to make simple games easier to write on early hobbyist computers. It's tiny — 35 instructions, 4 KB of memory, a 64×32 monochrome display, a 16-key hex keypad, and two timers. The games (Pong, Space Invaders, Tetris, Breakout, and friends) are public-domain classics are decades old.
 
 This project implements the full instruction set and runs those original ROMs.
 

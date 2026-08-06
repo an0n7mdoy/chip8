@@ -144,6 +144,21 @@
             background: #34343f;
             border-color: #6a6a80;
         }
+
+        footer {
+            margin-top: 4px;
+            font-size: clamp(12px, 3.5vw, 15px);
+        }
+
+        footer a {
+            color: #7f7f8c;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            color: #a8a8b4;
+            text-decoration: underline;
+        }
     </style>
 </head>
 
@@ -197,6 +212,10 @@
             <button class="key" data-code="KeyV"><span class="kb">V</span><span class="hex">F</span></button>
         </div>
     </div>
+
+    <footer>
+        <a href="https://github.com/an0n7mdoy/chip8" target="_blank" rel="noopener">View source on GitHub</a>
+    </footer>
 
     <!-- Bundles gl.js + audio.js + sapp_jsutils + quad-net. Plain gl.js would
          leave the beep's audio_* imports undefined at runtime. -->
